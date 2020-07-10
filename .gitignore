@@ -1,3 +1,5 @@
+.idea/
+
 # Ignore contents of virtual environment directory
 venv/*
 
