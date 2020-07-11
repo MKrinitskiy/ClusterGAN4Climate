@@ -1,16 +1,17 @@
 from __future__ import print_function
 
+
 try:
     import os
     import numpy as np
-    
+
     from torch.autograd import Variable
     from torch.autograd import grad as torch_grad
-    
+
     import torch.nn as nn
     import torch.nn.functional as F
     import torch
-    
+
     from itertools import chain as ichain
 
 except ImportError as e:
@@ -18,10 +19,9 @@ except ImportError as e:
     raise ImportError
 
 
-
 # Nan-avoiding logarithm
 def tlog(x):
-      return torch.log(x + 1e-8)
+    return torch.log(x + 1e-8)
 
 
 # Softmax function
@@ -32,18 +32,22 @@ def softmax(x):
 # Cross Entropy loss with two vector inputs
 def cross_entropy(pred, soft_targets):
     log_softmax_pred = torch.nn.functional.log_softmax(pred, dim=1)
-    return torch.mean( torch.sum(- soft_targets * log_softmax_pred, 1) )
+    return torch.mean(torch.sum(- soft_targets * log_softmax_pred, 1))
 
 
 # Save a provided model to file
-def save_model(models=[], out_dir=''):
-
+def save_model(models=[], out_dir='', stage='final'):
     # Ensure at least one model to save
     assert len(models) > 0, "Must have at least one model to save."
 
     # Save models to directory out_dir
     for model in models:
-        filename = model.name + '.pth.tar'
+        if isinstance(stage, str):
+            filename = model.name + ('%s.pth.tar' % stage)
+        elif isinstance(stage, int):
+            filename = model.name + ('ep%04d.pth.tar' % stage)
+        else:
+            filename = model.name + '.pth.tar'
         outfile = os.path.join(out_dir, filename)
         torch.save(model.state_dict(), outfile)
 
@@ -70,15 +74,15 @@ def weights_init(m):
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
+
 # Sample a random latent space vector
 def sample_z(shape=64, latent_dim=10, n_c=10, fix_class=-1, req_grad=False):
-
-    assert (fix_class == -1 or (fix_class >= 0 and fix_class < n_c) ), "Requested class %i outside bounds."%fix_class
+    assert (fix_class == -1 or (fix_class >= 0 and fix_class < n_c)), "Requested class %i outside bounds." % fix_class
 
     Tensor = torch.cuda.FloatTensor
-    
+
     # Sample noise as generator input, zn
-    zn = Variable(Tensor(0.75*np.random.normal(0, 1, (shape, latent_dim))), requires_grad=req_grad)
+    zn = Variable(Tensor(0.75 * np.random.normal(0, 1, (shape, latent_dim))), requires_grad=req_grad)
 
     ######### zc, zc_idx variables with grads, and zc to one-hot vector
     # Pure one-hot vector generation
@@ -88,8 +92,8 @@ def sample_z(shape=64, latent_dim=10, n_c=10, fix_class=-1, req_grad=False):
     if (fix_class == -1):
         zc_idx = zc_idx.random_(n_c).cuda()
         zc_FT = zc_FT.scatter_(1, zc_idx.unsqueeze(1), 1.)
-        #zc_idx = torch.empty(shape, dtype=torch.long).random_(n_c).cuda()
-        #zc_FT = Tensor(shape, n_c).fill_(0).scatter_(1, zc_idx.unsqueeze(1), 1.)
+        # zc_idx = torch.empty(shape, dtype=torch.long).random_(n_c).cuda()
+        # zc_FT = Tensor(shape, n_c).fill_(0).scatter_(1, zc_idx.unsqueeze(1), 1.)
     else:
         zc_idx[:] = fix_class
         zc_FT[:, fix_class] = 1
@@ -100,9 +104,9 @@ def sample_z(shape=64, latent_dim=10, n_c=10, fix_class=-1, req_grad=False):
     zc = Variable(zc_FT, requires_grad=req_grad)
 
     ## Gaussian-noisey vector generation
-    #zc = Variable(Tensor(np.random.normal(0, 1, (shape, n_c))), requires_grad=req_grad)
-    #zc = softmax(zc)
-    #zc_idx = torch.argmax(zc, dim=1)
+    # zc = Variable(Tensor(np.random.normal(0, 1, (shape, n_c))), requires_grad=req_grad)
+    # zc = softmax(zc)
+    # zc_idx = torch.argmax(zc, dim=1)
 
     # Return components of latent space variable
     return zn, zc, zc_idx
@@ -118,7 +122,7 @@ def calc_gradient_penalty(netD, real_data, generated_data):
     alpha = torch.rand(b_size, 1, 1, 1)
     alpha = alpha.expand_as(real_data)
     alpha = alpha.cuda()
-    
+
     interpolated = alpha * real_data.data + (1 - alpha) * generated_data.data
     interpolated = Variable(interpolated, requires_grad=True)
     interpolated = interpolated.cuda()
