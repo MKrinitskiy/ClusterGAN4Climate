@@ -36,18 +36,18 @@ def cross_entropy(pred, soft_targets):
 
 
 # Save a provided model to file
-def save_model(models=[], out_dir='', stage='final'):
+def save_models(models=[], out_dir='', stage='final'):
     # Ensure at least one model to save
     assert len(models) > 0, "Must have at least one model to save."
 
     # Save models to directory out_dir
     for model in models:
         if isinstance(stage, str):
-            filename = model.name + ('%s.pth.tar' % stage)
+            filename = '%s_%s.pth.tar' % (stage, model.name)
         elif isinstance(stage, int):
-            filename = model.name + ('ep%04d.pth.tar' % stage)
+            filename = 'ep%04d_%s.pth.tar' % (stage, model.name)
         else:
-            filename = model.name + '.pth.tar'
+            filename = '%s.pth.tar' % model.name
         outfile = os.path.join(out_dir, filename)
         torch.save(model.state_dict(), outfile)
 

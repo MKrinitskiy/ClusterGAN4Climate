@@ -1,8 +1,7 @@
 from __future__ import print_function
 
 try:
-    import argparse
-    import os
+    import argparse, os, sys
     import numpy as np
 
     import matplotlib
@@ -24,35 +23,110 @@ try:
     
     from itertools import chain as ichain
 
-    from clusgan.definitions import DATASETS_DIR, RUNS_DIR
-    from clusgan.models import Generator_CNN, Encoder_CNN, Discriminator_CNN
-    from clusgan.utils import save_model, calc_gradient_penalty, sample_z, cross_entropy
-    from clusgan.datasets import get_dataloader, dataset_list
-    from clusgan.plots import plot_train_loss
+    # from libs.definitions import *
+    from libs.models import Generator_CNN, Encoder_CNN, Discriminator_CNN
+    from libs.utils import save_models, calc_gradient_penalty, sample_z, cross_entropy
+    from libs.datasets import get_dataloader, dataset_list
+    from libs.plots import plot_train_loss
     from tqdm import tqdm
+    from libs.parse_args import *
+    from libs.service_defs import *
+    from os.path import join, isfile, isdir
+    from libs.copy_tree import copytree_multi
 except ImportError as e:
     print(e)
     raise ImportError
 
-def main():
-    global args
-    parser = argparse.ArgumentParser(description="Convolutional NN Training Script")
-    parser.add_argument("-r", "--run_name", dest="run_name", default='clusgan', help="Name of training run")
-    parser.add_argument("-n", "--n_epochs", dest="n_epochs", default=200, type=int, help="Number of epochs")
-    parser.add_argument("-b", "--batch_size", dest="batch_size", default=64, type=int, help="Batch size")
-    parser.add_argument("-s", "--dataset_name", dest="dataset_name", default='mnist', choices=dataset_list,  help="Dataset name")
-    parser.add_argument("-w", "--wass_metric", dest="wass_metric", action='store_true', help="Flag for Wasserstein metric")
-    parser.add_argument("-g", "-–gpu", dest="gpu", default=0, type=int, help="GPU id to use")
-    parser.add_argument("-k", "-–num_workers", dest="num_workers", default=1, type=int, help="Number of dataset workers")
-    args = parser.parse_args()
+def main(args=None):
+    # global args
+    if args is None:
+        args = sys.argv[1:]
+    args = parse_args(args)
 
-    run_name = args.run_name
-    dataset_name = args.dataset_name
+    curr_run_name = args.run_name
+    EPOCHS = args.epochs
+    if 'steps_per_epoch' in args:
+        STEPS_PER_EPOCH = args.steps_per_epoch
+    else:
+        STEPS_PER_EPOCH = None
+
+    #region preparations
+
+    #region DATASETS_DIR
+    DATASETS_DIR = os.path.join(os.path.abspath('./'), 'datasets')
+    try:
+        EnsureDirectoryExists(DATASETS_DIR)
+    except:
+        print('datasets directory couldn`t be found and couldn`t be created:\n%s' % DATASETS_DIR)
+        raise FileNotFoundError('datasets directory couldn`t be found and couldn`t be created:\n%s' % DATASETS_DIR)
+    #endregion
+
+    #region data_dir
+    dataset_name = 'mnist'
+    data_dir = os.path.join(DATASETS_DIR, dataset_name)
+    try:
+        EnsureDirectoryExists(data_dir)
+    except:
+        print('data_dir couldn`t be found and couldn`t be created:\n%s' % data_dir)
+        raise FileNotFoundError('data_dir couldn`t be found and couldn`t be created:\n%s' % data_dir)
+    #endregion
+
+    #region logs_dir
+    logs_dir = os.path.join(os.path.abspath('./'), 'logs', curr_run_name)
+    try:
+        EnsureDirectoryExists(logs_dir)
+    except:
+        print('logs directory couldn`t be found and couldn`t be created:\n%s' % logs_dir)
+        raise FileNotFoundError('logs directory couldn`t be found and couldn`t be created:\n%s' % logs_dir)
+    #endregion
+
+    #region imgs_dir
+    imgs_dir = os.path.join(os.path.abspath('./'), 'logs', curr_run_name, 'images')
+    try:
+        EnsureDirectoryExists(imgs_dir)
+    except:
+        print('output images directory couldn`t be found and couldn`t be created:\n%s' % imgs_dir)
+        raise FileNotFoundError('output images directory couldn`t be found and couldn`t be created:\n%s' % imgs_dir)
+    #endregion
+
+    #region scripts_backup_dir
+    scripts_backup_dir = os.path.join(os.path.abspath('./'), 'scripts_backup', curr_run_name)
+    try:
+        EnsureDirectoryExists(scripts_backup_dir)
+    except:
+        print('scripts backup directory couldn`t be found and couldn`t be created:\n%s' % scripts_backup_dir)
+        raise FileNotFoundError('scripts backup directory couldn`t be found and couldn`t be created:\n%s' % scripts_backup_dir)
+    #endregion
+
+    #region models_dir
+    models_dir = os.path.join(os.path.abspath('./'), 'logs', curr_run_name, 'models')
+    try:
+        EnsureDirectoryExists(models_dir)
+    except:
+        print('models snapshots directory couldn`t be found and couldn`t be created:\n%s' % models_dir)
+        raise FileNotFoundError('models snapshots directory couldn`t be found and couldn`t be created:\n%s' % models_dir)
+    #endregion
+
+    # endregion preparations
+
+    #region backing up the scripts configuration
+    ignore_func = lambda dir, files: [f for f in files if (isfile(join(dir, f)) and f[-3:] != '.py')] + [d for d in files if ((isdir(d)) & (d.endswith('scripts_backup') |
+                                                                                                                                            d.endswith('.ipynb_checkpoints') |
+                                                                                                                                            d.endswith('__pycache__') |
+                                                                                                                                            d.endswith('build') |
+                                                                                                                                            d.endswith('datasets') |
+                                                                                                                                            d.endswith('logs') |
+                                                                                                                                            d.endswith('runs') |
+                                                                                                                                            d.endswith('snapshots')))]
+    copytree_multi('./', scripts_backup_dir, ignore=ignore_func)
+    #endregion
+
+
+
     device_id = args.gpu
     num_workers = args.num_workers
 
     # Training details
-    n_epochs = args.n_epochs
     batch_size = args.batch_size
     test_batch_size = 5000
     lr = 1e-4
@@ -65,33 +139,27 @@ def main():
     channels = 1
    
     # Latent space info
-    latent_dim = 128
-    n_c = 10
+    latent_dim = args.latent_dim
+    n_c = args.cat_num
     betan = 10
     betac = 10
    
-    # Wasserstein metric flag
-    # Wasserstein metric flag
     wass_metric = args.wass_metric
     mtype = 'van'
     if (wass_metric):
         mtype = 'wass'
     
     # Make directory structure for this run
-    sep_und = '_'
-    run_name_comps = ['%iepoch'%n_epochs, 'z%s'%str(latent_dim), mtype, 'bs%i'%batch_size, run_name]
-    run_name = sep_und.join(run_name_comps)
-
-    run_dir = os.path.join(RUNS_DIR, dataset_name, run_name)
-    data_dir = os.path.join(DATASETS_DIR, dataset_name)
-    imgs_dir = os.path.join(run_dir, 'images')
-    models_dir = os.path.join(run_dir, 'models')
-
-    os.makedirs(data_dir, exist_ok=True)
-    os.makedirs(run_dir, exist_ok=True)
-    os.makedirs(imgs_dir, exist_ok=True)
-    os.makedirs(models_dir, exist_ok=True)
-    print('\nResults to be saved in directory %s\n'%(run_dir))
+    # sep_und = '_'
+    # run_name_comps = ['%iepoch'%EPOCHS, 'z%s'%str(latent_dim), mtype, 'bs%i'%batch_size, curr_run_name]
+    # run_name = sep_und.join(run_name_comps)
+    # run_dir = os.path.join(RUNS_DIR, dataset_name, curr_run_name)
+    # data_dir = os.path.join(DATASETS_DIR, dataset_name)
+    # os.makedirs(data_dir, exist_ok=True)
+    # os.makedirs(run_dir, exist_ok=True)
+    # os.makedirs(imgs_dir, exist_ok=True)
+    # os.makedirs(models_dir, exist_ok=True)
+    # print('\nResults to be saved in directory %s\n'%(run_dir))
     
     x_shape = (channels, img_size, img_size)
     
@@ -145,16 +213,18 @@ def main():
     c_zc = []
     c_i = []
 
-    batches_per_epoch = list(dataloader.dataset.data.shape)[0]//dataloader.batch_size
-    if batches_per_epoch*dataloader.batch_size < list(dataloader.dataset.data.shape)[0]:
-        batches_per_epoch = batches_per_epoch+1
+    if STEPS_PER_EPOCH is None:
+        STEPS_PER_EPOCH = list(dataloader.dataset.data.shape)[0]//dataloader.batch_size
+        if STEPS_PER_EPOCH*dataloader.batch_size < list(dataloader.dataset.data.shape)[0]:
+            STEPS_PER_EPOCH = STEPS_PER_EPOCH+1
 
     # Training loop 
-    print('\nBegin training session with %i epochs...\n'%(n_epochs))
-    for epoch in range(n_epochs):
-        # pbar = tqdm(total=batches_per_epoch)
-        for idx, (imgs, itruth_label) in tqdm(enumerate(dataloader), total=batches_per_epoch):
-           
+    print('\nBegin training session with %i epochs...\n'%(EPOCHS))
+    for epoch in range(EPOCHS):
+        for idx, (imgs, itruth_label) in tqdm(enumerate(dataloader), total=STEPS_PER_EPOCH):
+            if idx >= STEPS_PER_EPOCH:
+                break
+
             # Ensure generator/encoder are trainable
             generator.train()
             encoder.train()
@@ -166,10 +236,7 @@ def main():
             # Configure input
             real_imgs = Variable(imgs.type(Tensor))
 
-            # ---------------------------
-            #  Train Generator + Encoder
-            # ---------------------------
-            
+            #region Train Generator + Encoder
             optimizer_GE.zero_grad()
             
             # Sample random latent variables
@@ -206,11 +273,10 @@ def main():
     
                 ge_loss.backward(retain_graph=True)
                 optimizer_GE.step()
+            #endregion
 
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
-    
+
+            #region Train Discriminator
             optimizer_D.zero_grad()
     
             # Measure discriminator's ability to classify real from generated samples
@@ -230,8 +296,7 @@ def main():
     
             d_loss.backward()
             optimizer_D.step()
-
-            # pbar.update(1)
+            #endregion
 
         # Save training losses
         d_l.append(d_loss.item())
@@ -247,7 +312,7 @@ def main():
         n_samp = n_sqrt_samp * n_sqrt_samp
 
 
-        ## Cycle through test real -> enc -> gen
+        #region Cycle through test real -> enc -> gen
         t_imgs, t_label = test_imgs.data, test_labels
         #r_imgs, i_label = real_imgs.data[:n_samp], itruth_label[:n_samp]
         # Encode sample real instances
@@ -258,9 +323,10 @@ def main():
         img_mse_loss = mse_loss(t_imgs, teg_imgs)
         # Save img reco cycle loss
         c_i.append(img_mse_loss.item())
+        #endregion
        
 
-        ## Cycle through randomly sampled encoding -> generator -> encoder
+        #region Cycle through randomly sampled encoding -> generator -> encoder
         zn_samp, zc_samp, zc_samp_idx = sample_z(shape=n_samp,
                                                  latent_dim=latent_dim,
                                                  n_c=n_c)
@@ -275,8 +341,9 @@ def main():
         # Save latent space cycle losses
         c_zn.append(lat_mse_loss.item())
         c_zc.append(lat_xe_loss.item())
+        #endregion
       
-        # Save cycled and generated examples!
+        #region Save cycled and generated examples!
         r_imgs, i_label = real_imgs.data[:n_samp], itruth_label[:n_samp]
         e_zn, e_zc, e_zc_logits = encoder(r_imgs)
         reg_imgs = generator(e_zn, e_zc)
@@ -289,8 +356,9 @@ def main():
         save_image(gen_imgs_samp.data[:n_samp],
                    '%s/gen_%06i.png' %(imgs_dir, epoch), 
                    nrow=n_sqrt_samp, normalize=True)
+        #endregion
         
-        ## Generate samples for specified classes
+        #region Generate samples for specified classes
         stack_imgs = []
         for idx_gen in range(n_c):
             # Sample specific class
@@ -311,26 +379,30 @@ def main():
         save_image(stack_imgs,
                    '%s/gen_classes_%06i.png' %(imgs_dir, epoch), 
                    nrow=n_c, normalize=True)
-     
+        #endregion
 
-        print ("[Epoch %d/%d] \n"\
-               "\tModel Losses: [D: %f] [GE: %f]" % (epoch, 
-                                                     n_epochs, 
-                                                     d_loss.item(),
-                                                     ge_loss.item())
-              )
-        
-        print("\tCycle Losses: [x: %f] [z_n: %f] [z_c: %f]"%(img_mse_loss.item(), 
-                                                             lat_mse_loss.item(), 
-                                                             lat_xe_loss.item())
-             )
+
+        #region snapshots
+        if args.snapshots_period == -1 or args.snapshots_period == 0:
+            pass
+        elif args.snapshots_period > 1:
+            if epoch % args.snapshots_period == 0:
+                model_list = [discriminator, encoder, generator]
+                save_models(models=model_list, out_dir=models_dir, stage=epoch)
+
+        #endregion
+
+        print ('[Epoch %d/%d]' % (epoch, EPOCHS))
+        print("\tModel Losses: [D: %f] [GE: %f]" % (d_loss.item(), ge_loss.item()))
+        print("\tCycle Losses: [x: %f] [z_n: %f] [z_c: %f]" % (img_mse_loss.item(), lat_mse_loss.item(), lat_xe_loss.item()))
 
     
 
 
     # Save training results
     train_df = pd.DataFrame({
-                             'n_epochs' : n_epochs,
+                             'EPOCHS' : EPOCHS,
+                             'STEPS_PER_EPOCH' : STEPS_PER_EPOCH,
                              'learning_rate' : lr,
                              'beta_1' : b1,
                              'beta_2' : b2,
@@ -348,24 +420,24 @@ def main():
                              'img_cycle_loss' : ['$||X-G(E(x))||$', c_i]
                             })
 
-    train_df.to_csv('%s/training_details.csv'%(run_dir))
+    train_df.to_csv(os.path.join(logs_dir, 'training_details.csv'))
 
 
     # Plot some training results
     plot_train_loss(df=train_df,
                     arr_list=['gen_enc_loss', 'disc_loss'],
-                    figname='%s/training_model_losses.png'%(run_dir)
+                    figname=os.path.join(logs_dir, 'training_model_losses.png')
                     )
 
     plot_train_loss(df=train_df,
                     arr_list=['zn_cycle_loss', 'zc_cycle_loss', 'img_cycle_loss'],
-                    figname='%s/training_cycle_loss.png'%(run_dir)
+                    figname=os.path.join(logs_dir, 'training_cycle_loss.png')
                     )
 
 
     # Save current state of trained models
     model_list = [discriminator, encoder, generator]
-    save_model(models=model_list, out_dir=models_dir)
+    save_models(models=model_list, out_dir=models_dir)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ try:
     
     from itertools import chain as ichain
 
-    from clusgan.utils import tlog, softmax, initialize_weights, calc_gradient_penalty
+    from .utils import tlog, softmax, initialize_weights, calc_gradient_penalty
 
     from torchsummary import summary
 except ImportError as e:
