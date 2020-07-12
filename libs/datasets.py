@@ -47,13 +47,16 @@ def get_dataset(dataset_name='mnist'):
 
 
 
-def get_dataloader(data_dir='', batch_size=64, train_set=True, num_workers=1):
+def get_dataloader(data_dir='', batch_size=64, train_set=True, num_workers=1, augment = True):
 
-    seq = iaa.Sequential([iaa.Resize((64,64)),
-                          iaa.Affine(rotate=(-5, 5),
-                                     translate_px=(-10, 10),
-                                     shear=(-5, 5))],
-                         random_order=False)
+    if augment:
+        seq = iaa.Sequential([iaa.Resize((64,64)),
+                              iaa.Affine(rotate=(-5, 5),
+                                         translate_px=(-10, 10),
+                                         shear=(-5, 5))],
+                             random_order=False)
+    else:
+        seq = iaa.Resize((64, 64))
 
     dataloader = torch.utils.data.DataLoader(
             datasets.MNIST(data_dir,
@@ -62,7 +65,6 @@ def get_dataloader(data_dir='', batch_size=64, train_set=True, num_workers=1):
                            transform=transforms.Compose([np.array,
                                                          seq.augment_images,
                                                          transforms.ToTensor(),
-                                                         #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                                                          ])),
             num_workers=num_workers,
             batch_size=batch_size,

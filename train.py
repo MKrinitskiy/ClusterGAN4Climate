@@ -38,7 +38,6 @@ except ImportError as e:
     raise ImportError
 
 def main(args=None):
-    # global args
     if args is None:
         args = sys.argv[1:]
     args = parse_args(args)
@@ -123,7 +122,7 @@ def main(args=None):
 
 
 
-    device_id = args.gpu
+    # device_id = args.gpu
     num_workers = args.num_workers
 
     # Training details
@@ -164,8 +163,8 @@ def main(args=None):
     x_shape = (channels, img_size, img_size)
     
     cuda = True if torch.cuda.is_available() else False
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    torch.cuda.set_device(device_id)
+    # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    torch.cuda.set_device(0)
 
     # Loss function
     bce_loss = torch.nn.BCELoss()
@@ -190,10 +189,12 @@ def main(args=None):
     # Configure training data loader
     dataloader = get_dataloader(data_dir=data_dir,
                                 batch_size=batch_size,
-                                num_workers=num_workers)
+                                num_workers=num_workers,
+                                train_set=True,
+                                augment=True)
 
     # Test data loader
-    testdata = get_dataloader(data_dir=data_dir, batch_size=test_batch_size, train_set=False)
+    testdata = get_dataloader(data_dir=data_dir, batch_size=test_batch_size, train_set=False, augment=False)
     test_imgs, test_labels = next(iter(testdata))
     test_imgs = Variable(test_imgs.type(Tensor))
    

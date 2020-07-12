@@ -20,10 +20,10 @@ def parse_args(args):
 
     parser.add_argument('--run-name',           dest="run_name",            help='name for the current run (directories will be created based on this name)', default='test_run')
     parser.add_argument('--batch-size',         dest='batch_size',          help='Size of the batches.', default=64, type=int)
-    parser.add_argument('--val-batch-size',     dest='val_batch_size',      help='Size of the batches for evaluation.', default=32, type=int)
+    # parser.add_argument('--val-batch-size',     dest='val_batch_size',      help='Size of the batches for evaluation.', default=32, type=int)
     parser.add_argument('--epochs',             dest="epochs",              help='Number of epochs to train.', type=int, default=200)
     parser.add_argument('--wass-metric',        dest="wass_metric",         help="Flag for Wasserstein metric", action='store_true')
-    parser.add_argument('-–gpu',                dest="gpu",                 help="GPU id to use", default=0, type=int)
+    # parser.add_argument('-–gpu',                dest="gpu",                 help="GPU id to use", default=0, type=int)
     parser.add_argument('--num-workers',        dest="num_workers",         help="Number of dataset workers", default=1, type=int)
     parser.add_argument('--snapshots-period',   dest="snapshots_period",    help="Save model snapshots every N epochs; -1 (default) for final models only", default=-1, type=int)
     parser.add_argument('--latent-dim',         dest='latent_dim',          help='(real) embeddings dimensionality', type=int, default=32)
