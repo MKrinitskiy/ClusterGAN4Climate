@@ -9,6 +9,8 @@ try:
     import torch.nn as nn
     import torch.nn.functional as F
     import torch
+
+    from torchvision.models.resnet import BasicBlock, Bottleneck
     
     from itertools import chain as ichain
 

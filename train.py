@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 try:
-    import argparse, os, sys
+    import argparse, os, sys, pickle
     import numpy as np
 
     import matplotlib
@@ -33,6 +33,7 @@ try:
     from libs.service_defs import *
     from os.path import join, isfile, isdir
     from libs.copy_tree import copytree_multi
+    from torch.utils.tensorboard import SummaryWriter
 except ImportError as e:
     print(e)
     raise ImportError
@@ -106,6 +107,15 @@ def main(args=None):
         raise FileNotFoundError('models snapshots directory couldn`t be found and couldn`t be created:\n%s' % models_dir)
     #endregion
 
+    # region models_dir
+    tboard_dir = os.path.join(os.path.abspath('./'), 'logs', curr_run_name, 'TBoard')
+    try:
+        EnsureDirectoryExists(tboard_dir)
+    except:
+        print('Tensorboard directory couldn`t be found and couldn`t be created:\n%s' % tboard_dir)
+        raise FileNotFoundError('Tensorboard directory directory couldn`t be found and couldn`t be created:\n%s' % tboard_dir)
+    # endregion
+
     # endregion preparations
 
     #region backing up the scripts configuration
@@ -147,18 +157,6 @@ def main(args=None):
     mtype = 'van'
     if (wass_metric):
         mtype = 'wass'
-    
-    # Make directory structure for this run
-    # sep_und = '_'
-    # run_name_comps = ['%iepoch'%EPOCHS, 'z%s'%str(latent_dim), mtype, 'bs%i'%batch_size, curr_run_name]
-    # run_name = sep_und.join(run_name_comps)
-    # run_dir = os.path.join(RUNS_DIR, dataset_name, curr_run_name)
-    # data_dir = os.path.join(DATASETS_DIR, dataset_name)
-    # os.makedirs(data_dir, exist_ok=True)
-    # os.makedirs(run_dir, exist_ok=True)
-    # os.makedirs(imgs_dir, exist_ok=True)
-    # os.makedirs(models_dir, exist_ok=True)
-    # print('\nResults to be saved in directory %s\n'%(run_dir))
     
     x_shape = (channels, img_size, img_size)
     
@@ -219,7 +217,29 @@ def main(args=None):
         if STEPS_PER_EPOCH*dataloader.batch_size < list(dataloader.dataset.data.shape)[0]:
             STEPS_PER_EPOCH = STEPS_PER_EPOCH+1
 
-    # Training loop 
+    #region saving train details for in-train-time analysis
+    train_details = {'run_name': curr_run_name,
+                     'EPOCHS': EPOCHS,
+                     'STEPS_PER_EPOCH': STEPS_PER_EPOCH,
+                     'learning_rate': lr,
+                     'beta_1': b1,
+                     'beta_2': b2,
+                     'weight_decay': decay,
+                     'n_skip_iter': n_skip_iter,
+                     'latent_dim': latent_dim,
+                     'n_classes': n_c,
+                     'beta_n': betan,
+                     'beta_c': betac,
+                     'wass_metric': wass_metric,
+                     }
+    # this file will be rewritten lately
+    with open(os.path.join(logs_dir, 'train_details.pkl'), 'wb') as f:
+        pickle.dump(train_details, f)
+    # region saving train details for in-train-time analysis
+
+    writer = SummaryWriter(log_dir=tboard_dir)
+
+    #region Training loop
     print('\nBegin training session with %i epochs...\n'%(EPOCHS))
     for epoch in range(EPOCHS):
         for idx, (imgs, itruth_label) in tqdm(enumerate(dataloader), total=STEPS_PER_EPOCH):
@@ -343,7 +363,24 @@ def main(args=None):
         c_zn.append(lat_mse_loss.item())
         c_zc.append(lat_xe_loss.item())
         #endregion
-      
+
+        #region write losses to tensorboard
+        writer.add_scalar('Loss/train/gen_enc_loss', ge_loss.item(), epoch)
+        writer.add_scalar('Loss/train/dsc_loss', d_loss.item(), epoch)
+        writer.add_scalar('Loss/train/cycle/lat_mse_loss', lat_mse_loss.item(), epoch)
+        writer.add_scalar('Loss/train/cycle/lat_xe_loss', lat_xe_loss.item(), epoch)
+        writer.add_scalar('Loss/train/cycle/img_mse_loss', img_mse_loss.item(), epoch)
+
+
+        # 'zn_cycle_loss': {'label': '$||Z_n-E(G(x))_n||$',
+        #                   'data': c_zn},
+        # 'zc_cycle_loss': {'label': '$||Z_c-E(G(x))_c||$',
+        #                   'data': c_zc},
+        # 'img_cycle_loss': {'label': '$||X-G(E(x))||$',
+        #                    'data': c_i}
+
+        #endregion
+
         #region Save cycled and generated examples!
         r_imgs, i_label = real_imgs.data[:n_samp], itruth_label[:n_samp]
         e_zn, e_zc, e_zc_logits = encoder(r_imgs)
@@ -396,42 +433,46 @@ def main(args=None):
         print ('[Epoch %d/%d]' % (epoch, EPOCHS))
         print("\tModel Losses: [D: %f] [GE: %f]" % (d_loss.item(), ge_loss.item()))
         print("\tCycle Losses: [x: %f] [z_n: %f] [z_c: %f]" % (img_mse_loss.item(), lat_mse_loss.item(), lat_xe_loss.item()))
-
+    #endregion
     
 
 
     # Save training results
-    train_df = pd.DataFrame({
-                             'EPOCHS' : EPOCHS,
-                             'STEPS_PER_EPOCH' : STEPS_PER_EPOCH,
-                             'learning_rate' : lr,
-                             'beta_1' : b1,
-                             'beta_2' : b2,
-                             'weight_decay' : decay,
-                             'n_skip_iter' : n_skip_iter,
-                             'latent_dim' : latent_dim,
-                             'n_classes' : n_c,
-                             'beta_n' : betan,
-                             'beta_c' : betac,
-                             'wass_metric' : wass_metric,
-                             'gen_enc_loss' : ['G+E', ge_l],
-                             'disc_loss' : ['D', d_l],
-                             'zn_cycle_loss' : ['$||Z_n-E(G(x))_n||$', c_zn],
-                             'zc_cycle_loss' : ['$||Z_c-E(G(x))_c||$', c_zc],
-                             'img_cycle_loss' : ['$||X-G(E(x))||$', c_i]
-                            })
-
-    train_df.to_csv(os.path.join(logs_dir, 'training_details.csv'))
-
+    train_details = {'run_name'         : curr_run_name,
+                     'EPOCHS'           : EPOCHS,
+                     'STEPS_PER_EPOCH'  : STEPS_PER_EPOCH,
+                     'learning_rate'    : lr,
+                     'beta_1'           : b1,
+                     'beta_2'           : b2,
+                     'weight_decay'     : decay,
+                     'n_skip_iter'      : n_skip_iter,
+                     'latent_dim'       : latent_dim,
+                     'n_classes'        : n_c,
+                     'beta_n'           : betan,
+                     'beta_c'           : betac,
+                     'wass_metric'      : wass_metric,
+                     'gen_enc_loss'     : {'label'  : 'G+E',
+                                           'data'   : ge_l},
+                     'disc_loss'        : {'label'  : 'D',
+                                           'data'   : d_l},
+                     'zn_cycle_loss'    : {'label'  : '$||Z_n-E(G(x))_n||$',
+                                           'data'   : c_zn},
+                     'zc_cycle_loss'    : {'label'  : '$||Z_c-E(G(x))_c||$',
+                                           'data'   : c_zc},
+                     'img_cycle_loss' : {'label'    : '$||X-G(E(x))||$',
+                                         'data'     : c_i}
+                     }
+    with open(os.path.join(logs_dir, 'train_details.pkl'), 'wb') as f:
+        pickle.dump(train_details, f)
 
     # Plot some training results
-    plot_train_loss(df=train_df,
-                    arr_list=['gen_enc_loss', 'disc_loss'],
+    plot_train_loss(train_details=train_details,
+                    var_list=['gen_enc_loss', 'disc_loss'],
                     figname=os.path.join(logs_dir, 'training_model_losses.png')
                     )
 
-    plot_train_loss(df=train_df,
-                    arr_list=['zn_cycle_loss', 'zc_cycle_loss', 'img_cycle_loss'],
+    plot_train_loss(train_details=train_details,
+                    var_list=['zn_cycle_loss', 'zc_cycle_loss', 'img_cycle_loss'],
                     figname=os.path.join(logs_dir, 'training_cycle_loss.png')
                     )
 

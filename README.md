@@ -78,7 +78,11 @@ Options for the script `encode.py`:
   </tr>
   <tr>
     <td><code>--snapshot-stage</code></td>
-    <td>stage of training (epoch, <code>int</code>) for loading models snapshot (most close one will be involved in case there is no snapshots for this exact epoch);<br /><code>-1</code> means the last one except final one. This option is mutually exclusive with the option <code>--snapshot-final</code></td>
+    <td>stage of training (epoch, <code>int</code>) for loading models snapshot (most close one will be involved in case there is no snapshots for this exact epoch);<br /><code>-1</code> means the last one except final one. This option is mutually exclusive with the option <code>--snapshot-final</code> and <code>--snapshot-all</code> </td>
+  </tr>
+  <tr>
+    <td><code>--snapshot-all</code></td>
+    <td>encode dataset using all the snapshots made during training. This option is mutually exclusive with the option <code>--snapshot-final</code> and <code>--snapshot-stage</code></td>
   </tr>
   <tr>
     <td><code>--num-examples</code></td>
@@ -100,12 +104,13 @@ Options for the script `encode.py`:
 
 
 
+
 #### UMAP dimensionality reduction
 
 Next, one may want to apply UMAP to the encoded data. This script may be useful in this case:
 
 ```bash
-python umap-cluster.py --run-name=test_run --file-path=./logs/test_run/mnist_train_stage-ep0135_encoded.npz
+python umap-project.py --run-name=test_run --file-path=./logs/test_run/mnist_train_stage-ep0135_encoded.npz
 ```
 
 options for the script `umap-cluster.py`:
@@ -121,9 +126,14 @@ options for the script `umap-cluster.py`:
   </tr>
   <tr>
     <td><code>--file-path</code></td>
-    <td>Flag</td>
+    <td>encodings file path. This option is mutually exclusive with the option <code>--files-all</code></td>
+  </tr>
+  <tr>
+    <td><code>--files-all</code></td>
+    <td>cluster using encodings of all available training stages (each stage separately). This option is mutually exclusive with the option <code>--file-path</code></td>
   </tr>
 </table>
+
 
 As a result, the UMAP dimensionality reduction will be applied to the encodings, and the plot will be placed in the file, e.g., `./logs/test_run/umap-mnist_train_stage-ep0135_encoded.png`. Here is an example of this plot:
 
