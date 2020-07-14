@@ -18,6 +18,21 @@ seaborn 0.10.1
 torchvision 0.6.0
 ```
 
+In `umap-project.py`, we also use GPU-enabled implementation of [UMAP](https://arxiv.org/abs/1802.03426) available in [RAPIDSAI](https://rapids.ai/) suite of open source software libraries and APIs. The line responsible for that is the following:
+
+```
+from cuml import UMAP
+```
+
+One can replace it with the [standard implementation](https://umap-learn.readthedocs.io/en/latest/) simply replacing the line with the following:
+
+```
+from umap import UMAP
+```
+
+in which case, one needs to ensure [`umap-learn`](https://umap-learn.readthedocs.io/en/latest/) package is installed.
+
+
 
 
 ## Run ClusterGAN on MNIST
