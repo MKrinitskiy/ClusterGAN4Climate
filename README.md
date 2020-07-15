@@ -37,7 +37,7 @@ in which case, one needs to ensure [`umap-learn`](https://umap-learn.readthedocs
 
 ## Run ClusterGAN on MNIST
 
-We narrowed the scope of the applications to MNIST only (so far). So for the running of ClusterGAN on the MNIST dataset one may use the following command:
+We narrowed the scope of the applications to MNIST only (so far). So the running of ClusterGAN on the MNIST dataset one may use the following command:
 ```bash
 CUDA_VISIBLE_DEVICES=gpu_id python train.py --run-name=test_run --batch-size=64 --epochs=500 --num-workers=16 --snapshots-period=15 --latent-dim=32 --cat-num=10
 ```
