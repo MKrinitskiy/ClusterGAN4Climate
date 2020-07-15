@@ -1,3 +1,5 @@
+scripts_backup/
+logs/
 .idea/
 .DS_Store
 
