@@ -51,7 +51,6 @@ def main(args=None):
         STEPS_PER_EPOCH = None
 
     #region preparations
-
     #region DATASETS_DIR
     DATASETS_DIR = os.path.join(os.path.abspath('./'), 'datasets')
     try:
@@ -132,10 +131,11 @@ def main(args=None):
 
 
 
-    # device_id = args.gpu
+
+
+    #region setting training details
     num_workers = args.num_workers
 
-    # Training details
     batch_size = args.batch_size
     test_batch_size = 5000
     lr = 1e-4
@@ -163,8 +163,9 @@ def main(args=None):
     cuda = True if torch.cuda.is_available() else False
     # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     torch.cuda.set_device(0)
+    #endregion
 
-    # Loss function
+    # Loss functions
     bce_loss = torch.nn.BCELoss()
     xe_loss = torch.nn.CrossEntropyLoss()
     mse_loss = torch.nn.MSELoss()
@@ -246,6 +247,9 @@ def main(args=None):
             if idx >= STEPS_PER_EPOCH:
                 break
 
+            if args.debug:
+                continue
+
             # Ensure generator/encoder are trainable
             generator.train()
             encoder.train()
@@ -318,6 +322,9 @@ def main(args=None):
             d_loss.backward()
             optimizer_D.step()
             #endregion
+
+        if args.debug:
+            continue
 
         # Save training losses
         d_l.append(d_loss.item())
