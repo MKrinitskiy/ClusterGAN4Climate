@@ -23,8 +23,10 @@ try:
     
     from itertools import chain as ichain
 
-    from libs.models_resnet_like import Generator_CNN, Encoder_CNN, Discriminator_CNN
+    # from libs.definitions import *
+    from libs.models import Generator_CNN, Encoder_CNN, Discriminator_CNN
     from libs.utils import save_models, calc_gradient_penalty, sample_z, cross_entropy
+    from libs.datasets import get_dataloader, dataset_list
     from libs.plots import plot_train_loss
     from tqdm import tqdm
     from libs.parse_args import *
@@ -32,7 +34,6 @@ try:
     from os.path import join, isfile, isdir
     from libs.copy_tree import copytree_multi
     from torch.utils.tensorboard import SummaryWriter
-    from libs.CustomMNISTdataset import *
 except ImportError as e:
     print(e)
     raise ImportError
@@ -135,18 +136,17 @@ def main(args=None):
 
     # device_id = args.gpu
     num_workers = args.num_workers
-    if args.debug:
-        num_workers = 0
 
     # Training details
     batch_size = args.batch_size
+    test_batch_size = 5000
     lr = 1e-4
     b1 = 0.5
     b2 = 0.9 #99
     decay = 2.5*1e-5
     n_skip_iter = 1 #5
 
-    img_size = 256
+    img_size = 64
     channels = 1
    
     # Latent space info
@@ -188,29 +188,16 @@ def main(args=None):
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
     
     # Configure training data loader
-    def collation(data):
-        x_tensors = [d[0] for d in data]
-        y_tensors = [d[1] for d in data]
-        x_tensor = torch.cat(x_tensors, dim=0)
-        y_tensor = torch.cat(y_tensors, dim=0)
-        return x_tensor, y_tensor
-
-    train_dataset = CustomMNISTdataset(mnist_fname=os.path.join(DATASETS_DIR, 'mnist', 'MNIST', 'mnist.npz'),
-                                       train_set=True, augment=True)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers,
-                                  collate_fn=collation)
-    # dataloader = get_dataloader(data_dir=data_dir,
-    #                             batch_size=batch_size,
-    #                             num_workers=num_workers,
-    #                             train_set=True,
-    #                             augment=True)
+    dataloader = get_dataloader(data_dir=data_dir,
+                                batch_size=batch_size,
+                                num_workers=num_workers,
+                                train_set=True,
+                                augment=True)
 
     # Test data loader
-    # test_dataloader = get_dataloader(data_dir=data_dir, batch_size=batch_size, train_set=False, augment=False)
-    test_dataset = CustomMNISTdataset(mnist_fname=os.path.join(DATASETS_DIR, 'mnist', 'MNIST', 'mnist.npz'),
-                                       train_set=False, augment=True)
-    test_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers,
-                                 collate_fn=collation)
+    testdata = get_dataloader(data_dir=data_dir, batch_size=test_batch_size, train_set=False, augment=False)
+    test_imgs, test_labels = next(iter(testdata))
+    test_imgs = Variable(test_imgs.type(Tensor))
    
     ge_chain = ichain(generator.parameters(),
                       encoder.parameters())
@@ -229,19 +216,14 @@ def main(args=None):
     c_i = []
 
     if STEPS_PER_EPOCH is None:
-        STEPS_PER_EPOCH = len(train_dataset)//train_dataloader.batch_size
-        if STEPS_PER_EPOCH * train_dataloader.batch_size < len(train_dataset):
+        STEPS_PER_EPOCH = list(dataloader.dataset.data.shape)[0]//dataloader.batch_size
+        if STEPS_PER_EPOCH*dataloader.batch_size < list(dataloader.dataset.data.shape)[0]:
             STEPS_PER_EPOCH = STEPS_PER_EPOCH+1
-
-    EVAL_STEPS = len(test_dataset)//test_dataloader.batch_size
-    if EVAL_STEPS*test_dataloader.batch_size < len(test_dataset):
-        EVAL_STEPS = EVAL_STEPS+1
 
     #region saving train details for in-train-time analysis
     train_details = {'run_name': curr_run_name,
                      'EPOCHS': EPOCHS,
                      'STEPS_PER_EPOCH': STEPS_PER_EPOCH,
-                     'EVAL_STEPS': EVAL_STEPS,
                      'learning_rate': lr,
                      'beta_1': b1,
                      'beta_2': b2,
@@ -263,7 +245,7 @@ def main(args=None):
     #region Training loop
     print('\nBegin training session with %i epochs...\n'%(EPOCHS))
     for epoch in range(EPOCHS):
-        for idx, (imgs, itruth_label) in tqdm(enumerate(train_dataloader), total=STEPS_PER_EPOCH):
+        for idx, (imgs, itruth_label) in tqdm(enumerate(dataloader), total=STEPS_PER_EPOCH):
             if idx >= STEPS_PER_EPOCH:
                 break
 
@@ -356,23 +338,16 @@ def main(args=None):
 
 
         #region Cycle through test real -> enc -> gen
-        print('cycle evaluation...')
-        cycle_eval_mse_losses = []
-        for idx, (eval_imgs, eval_labels) in tqdm(enumerate(test_dataloader), total=EVAL_STEPS):
-            # test_imgs, test_labels = next(iter(testdata))
-            eval_imgs = Variable(eval_imgs.type(Tensor))
-
-            # t_imgs, t_label = test_imgs.data, test_labels
-
-            # Encode sample real instances
-            e_tzn, e_tzc, e_tzc_logits = encoder(eval_imgs)
-            # Generate sample instances from encoding
-            teg_imgs = generator(e_tzn, e_tzc)
-            # Calculate cycle reconstruction loss
-            img_mse_loss = mse_loss(eval_imgs, teg_imgs)
-            # Save img reco cycle loss
-            cycle_eval_mse_losses.append(img_mse_loss.item())
-        c_i.append(np.mean(cycle_eval_mse_losses))
+        t_imgs, t_label = test_imgs.data, test_labels
+        #r_imgs, i_label = real_imgs.data[:n_samp], itruth_label[:n_samp]
+        # Encode sample real instances
+        e_tzn, e_tzc, e_tzc_logits = encoder(t_imgs)
+        # Generate sample instances from encoding
+        teg_imgs = generator(e_tzn, e_tzc)
+        # Calculate cycle reconstruction loss
+        img_mse_loss = mse_loss(t_imgs, teg_imgs)
+        # Save img reco cycle loss
+        c_i.append(img_mse_loss.item())
         #endregion
        
 
@@ -400,6 +375,15 @@ def main(args=None):
         writer.add_scalar('Loss/train/cycle/lat_mse_loss', lat_mse_loss.item(), epoch)
         writer.add_scalar('Loss/train/cycle/lat_xe_loss', lat_xe_loss.item(), epoch)
         writer.add_scalar('Loss/train/cycle/img_mse_loss', img_mse_loss.item(), epoch)
+
+
+        # 'zn_cycle_loss': {'label': '$||Z_n-E(G(x))_n||$',
+        #                   'data': c_zn},
+        # 'zc_cycle_loss': {'label': '$||Z_c-E(G(x))_c||$',
+        #                   'data': c_zc},
+        # 'img_cycle_loss': {'label': '$||X-G(E(x))||$',
+        #                    'data': c_i}
+
         #endregion
 
         #region Save cycled and generated examples!

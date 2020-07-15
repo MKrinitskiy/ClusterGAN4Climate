@@ -73,3 +73,24 @@ def get_dataloader(data_dir='', batch_size=64, train_set=True, num_workers=1, au
     return dataloader
 
 
+
+
+# class CustomDataset(Dataset):
+#     def __init__(self, n_images, n_classes, transform=None):
+#         self.images = np.random.randint(0, 255,
+#                                         (n_images, 224, 224, 3),
+#                                         dtype=np.uint8)
+#         self.targets = np.random.randn(n_images, n_classes)
+#         self.transform = transform
+#
+#     def __getitem__(self, item):
+#         image = self.images[item]
+#         target = self.targets[item]
+#
+#         if self.transform:
+#             image = self.transform(image)
+#
+#         return image, target
+#
+#     def __len__(self):
+#         return len(self.images)
