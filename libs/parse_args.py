@@ -31,7 +31,7 @@ def parse_args(args):
     # parser.add_argument('--steps-per-epoch',        help='Number of steps per epoch.', type=int)
     # parser.add_argument('--val-steps',              help='Number of steps per validation run.', type=int, default=100)
     # parser.add_argument('--no-snapshots',           help='Disable saving snapshots.', dest='snapshots', action='store_false')
-    # parser.add_argument('--debug',                  help='launch in DEBUG mode', dest='debug', action='store_true')
+    parser.add_argument('--debug',                  help='launch in DEBUG mode', dest='debug', action='store_true')
 
     # parser.add_argument('--model-only',             help='compose model only and output its description', dest='model_only', action='store_true')
     # parser.add_argument('--generator-multiplier',   help='generator batches per discriminator batches for the sake of training stability', dest='generator_multiplier', default=4, type=int)

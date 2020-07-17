@@ -76,10 +76,10 @@ def weights_init(m):
 
 
 # Sample a random latent space vector
-def sample_z(shape=64, latent_dim=10, n_c=10, fix_class=-1, req_grad=False):
+def sample_z(shape=64, latent_dim=10, n_c=10, fix_class=-1, req_grad=False, cuda_available = False):
     assert (fix_class == -1 or (fix_class >= 0 and fix_class < n_c)), "Requested class %i outside bounds." % fix_class
 
-    Tensor = torch.cuda.FloatTensor
+    Tensor = torch.cuda.FloatTensor if cuda_available else torch.FloatTensor
 
     # Sample noise as generator input, zn
     zn = Variable(Tensor(0.75 * np.random.normal(0, 1, (shape, latent_dim))), requires_grad=req_grad)
@@ -90,16 +90,17 @@ def sample_z(shape=64, latent_dim=10, n_c=10, fix_class=-1, req_grad=False):
     zc_idx = torch.empty(shape, dtype=torch.long)
 
     if (fix_class == -1):
-        zc_idx = zc_idx.random_(n_c).cuda()
+        zc_idx = zc_idx.random_(n_c)
+        if cuda_available:
+            zc_idx = zc_idx.cuda()
         zc_FT = zc_FT.scatter_(1, zc_idx.unsqueeze(1), 1.)
-        # zc_idx = torch.empty(shape, dtype=torch.long).random_(n_c).cuda()
-        # zc_FT = Tensor(shape, n_c).fill_(0).scatter_(1, zc_idx.unsqueeze(1), 1.)
     else:
         zc_idx[:] = fix_class
         zc_FT[:, fix_class] = 1
 
-        zc_idx = zc_idx.cuda()
-        zc_FT = zc_FT.cuda()
+        if cuda_available:
+            zc_idx = zc_idx.cuda()
+            zc_FT = zc_FT.cuda()
 
     zc = Variable(zc_FT, requires_grad=req_grad)
 
@@ -112,7 +113,7 @@ def sample_z(shape=64, latent_dim=10, n_c=10, fix_class=-1, req_grad=False):
     return zn, zc, zc_idx
 
 
-def calc_gradient_penalty(netD, real_data, generated_data):
+def calc_gradient_penalty(netD, real_data, generated_data, cuda_available = False):
     # GP strength
     LAMBDA = 10
 
@@ -121,18 +122,23 @@ def calc_gradient_penalty(netD, real_data, generated_data):
     # Calculate interpolation
     alpha = torch.rand(b_size, 1, 1, 1)
     alpha = alpha.expand_as(real_data)
-    alpha = alpha.cuda()
+    if cuda_available:
+        alpha = alpha.cuda()
 
     interpolated = alpha * real_data.data + (1 - alpha) * generated_data.data
     interpolated = Variable(interpolated, requires_grad=True)
-    interpolated = interpolated.cuda()
+    if cuda_available:
+        interpolated = interpolated.cuda()
 
     # Calculate probability of interpolated examples
     prob_interpolated = netD(interpolated)
 
     # Calculate gradients of probabilities with respect to examples
+    ones = torch.ones(prob_interpolated.size())
+    if cuda_available:
+        ones = ones.cuda()
     gradients = torch_grad(outputs=prob_interpolated, inputs=interpolated,
-                           grad_outputs=torch.ones(prob_interpolated.size()).cuda(),
+                           grad_outputs=ones,
                            create_graph=True, retain_graph=True)[0]
 
     # Gradients have shape (batch_size, num_channels, img_width, img_height),
